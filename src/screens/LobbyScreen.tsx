@@ -12,7 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types';
 import { useSessionStore } from '../store/useSessionStore';
-import { openBill, unsubscribeFromSession } from '../services/sessionService';
+import { openBill, closeBill, unsubscribeFromSession } from '../services/sessionService';
 import { COLORS, SPACING, FONT_SIZE } from '../utils/theme';
 
 type Props = NativeStackScreenProps<RootStackParamList, 'Lobby'>;
@@ -31,6 +31,25 @@ export default function LobbyScreen({ navigation, route }: Props) {
     }
   }, [status, sessionId, navigation]);
 
+  // Guests notified when host cancels from lobby
+  useEffect(() => {
+    if (status === 'closed' && !isHost) {
+      Alert.alert(
+        'Session ended',
+        'The host has cancelled this session.',
+        [{
+          text: 'Go Home',
+          onPress: () => {
+            unsubscribeFromSession();
+            useSessionStore.getState().resetSession();
+            navigation.popToTop();
+          },
+        }],
+        { cancelable: false }
+      );
+    }
+  }, [status, isHost]);
+
   function handleCopyCode() {
     if (sessionCode) {
       Clipboard.setString(sessionCode);
@@ -45,6 +64,24 @@ export default function LobbyScreen({ navigation, route }: Props) {
     } catch (err) {
       Alert.alert('Error', String(err));
     }
+  }
+
+  function handleCancelSession() {
+    Alert.alert('Cancel session?', 'This will end the session for all participants.', [
+      { text: 'Keep Going', style: 'cancel' },
+      {
+        text: 'Cancel Session',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await closeBill(sessionId);
+            navigation.popToTop();
+          } catch (err) {
+            Alert.alert('Error', String(err));
+          }
+        },
+      },
+    ]);
   }
 
   function handleLeave() {
@@ -107,15 +144,20 @@ export default function LobbyScreen({ navigation, route }: Props) {
         ListFooterComponent={
           <View style={styles.footer}>
             {isHost ? (
-              <TouchableOpacity
-                style={[
-                  styles.openBillBtn,
-                  participantList.length < 1 && styles.btnDisabled,
-                ]}
-                onPress={handleOpenBill}
-              >
-                <Text style={styles.openBillBtnText}>Open Bill →</Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={[
+                    styles.openBillBtn,
+                    participantList.length < 1 && styles.btnDisabled,
+                  ]}
+                  onPress={handleOpenBill}
+                >
+                  <Text style={styles.openBillBtnText}>Open Bill →</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.cancelSessionBtn} onPress={handleCancelSession}>
+                  <Text style={styles.cancelSessionBtnText}>Cancel Session</Text>
+                </TouchableOpacity>
+              </>
             ) : (
               <View style={styles.waitingBox}>
                 <Text style={styles.waitingText}>
@@ -217,6 +259,14 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
   },
   waitingText: { color: COLORS.muted, fontSize: FONT_SIZE.md, textAlign: 'center' },
+  cancelSessionBtn: {
+    borderRadius: 12,
+    paddingVertical: SPACING.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(244,67,54,0.4)',
+  },
+  cancelSessionBtnText: { color: COLORS.error, fontWeight: '600', fontSize: FONT_SIZE.md },
   leaveBtn: {
     borderRadius: 12,
     paddingVertical: SPACING.md,

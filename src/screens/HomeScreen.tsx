@@ -19,6 +19,7 @@ import { getPreferredName } from '../types';
 import { useBillStore } from '../store/useBillStore';
 import { useApiKey } from '../hooks/useApiKey';
 import { useAuthStore } from '../store/useAuthStore';
+import { useSessionStore } from '../store/useSessionStore';
 import GlassCard from '../components/GlassCard';
 import { COLORS, SPACING, FONT_SIZE, GLASS } from '../utils/theme';
 
@@ -29,12 +30,26 @@ export default function HomeScreen({ navigation }: Props) {
   const addPerson = useBillStore((s) => s.addPerson);
   const { apiKey, saveApiKey } = useApiKey();
   const { user, profile } = useAuthStore();
+  const sessionId = useSessionStore((s) => s.sessionId);
+  const sessionCode = useSessionStore((s) => s.sessionCode);
+  const sessionStatus = useSessionStore((s) => s.status);
+  const isHost = useSessionStore((s) => s.isHost);
+  const activeSession = sessionId && sessionStatus !== 'closed' ? { sessionId, sessionCode, sessionStatus, isHost } : null;
   const [settingsVisible, setSettingsVisible] = useState(false);
   const [keyInput, setKeyInput] = useState('');
 
   const initials = profile?.displayName
     ? profile.displayName.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2)
     : null;
+
+  function handleRejoin() {
+    if (!activeSession) return;
+    if (activeSession.sessionStatus === 'lobby') {
+      navigation.navigate('Lobby', { sessionId: activeSession.sessionId! });
+    } else {
+      navigation.navigate('SharedBill', { sessionId: activeSession.sessionId! });
+    }
+  }
 
   function handleStart() {
     resetBill();
@@ -88,6 +103,21 @@ export default function HomeScreen({ navigation }: Props) {
               Go out. Order everything. Sort it later.
             </Text>
           </View>
+
+          {activeSession && (
+            <GlassCard style={styles.rejoinBanner} onPress={handleRejoin}>
+              <View style={styles.rejoinDot} />
+              <View style={styles.rejoinInfo}>
+                <Text style={styles.rejoinTitle}>
+                  {activeSession.isHost ? 'Your session is live' : 'Session in progress'}
+                </Text>
+                <Text style={styles.rejoinSub}>
+                  Code: {activeSession.sessionCode} · Tap to rejoin
+                </Text>
+              </View>
+              <Text style={styles.rejoinChevron}>›</Text>
+            </GlassCard>
+          )}
 
           <View style={styles.actions}>
             <TouchableOpacity style={styles.primaryBtn} onPress={handleStart}>
@@ -239,6 +269,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 22,
   },
+  rejoinBanner: {
+    width: '100%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    gap: SPACING.md,
+    borderColor: COLORS.accent,
+    borderWidth: 1,
+  },
+  rejoinDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.success,
+  },
+  rejoinInfo: { flex: 1 },
+  rejoinTitle: { color: COLORS.text, fontSize: FONT_SIZE.sm, fontWeight: '700' },
+  rejoinSub: { color: COLORS.muted, fontSize: FONT_SIZE.xs, marginTop: 2 },
+  rejoinChevron: { color: COLORS.accent, fontSize: 20, fontWeight: '700' },
   actions: {
     width: '100%',
     gap: SPACING.md,

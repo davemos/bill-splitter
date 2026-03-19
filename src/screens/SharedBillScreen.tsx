@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,8 @@ import {
   updateSessionExtras,
   addSessionDiscount,
   removeSessionDiscount,
+  closeBill,
+  unsubscribeFromSession,
 } from '../services/sessionService';
 import SessionReceiptParser from '../components/SessionReceiptParser';
 import NumericInput from '../components/NumericInput';
@@ -35,12 +37,32 @@ type Tab = 'manual' | 'photo';
 export default function SharedBillScreen({ navigation, route }: Props) {
   const { sessionId } = route.params;
   const isHost = useSessionStore((s) => s.isHost);
+  const status = useSessionStore((s) => s.status);
   const sessionCode = useSessionStore((s) => s.sessionCode);
   const myDeviceId = useSessionStore((s) => s.myDeviceId);
   const items = useSessionStore((s) => s.items);
   const claims = useSessionStore((s) => s.claims);
   const participants = useSessionStore((s) => s.participants);
   const extras = useSessionStore((s) => s.extras);
+
+  // Guests notified when host completes/cancels the session
+  useEffect(() => {
+    if (status === 'closed' && !isHost) {
+      Alert.alert(
+        'Session completed',
+        'The host has ended this session. Thank you for dining!',
+        [{
+          text: 'Go Home',
+          onPress: () => {
+            unsubscribeFromSession();
+            useSessionStore.getState().resetSession();
+            navigation.popToTop();
+          },
+        }],
+        { cancelable: false }
+      );
+    }
+  }, [status, isHost]);
 
   const [tab, setTab] = useState<Tab>('manual');
   const [itemName, setItemName] = useState('');
@@ -91,6 +113,23 @@ export default function SharedBillScreen({ navigation, route }: Props) {
         onPress: async () => {
           try {
             await removeSessionItem(sessionId, itemId);
+          } catch (err) {
+            Alert.alert('Error', String(err));
+          }
+        },
+      },
+    ]);
+  }
+
+  function handleCompleteSession() {
+    Alert.alert('Complete session?', 'This will close the session for all participants.', [
+      { text: 'Not Yet', style: 'cancel' },
+      {
+        text: 'Complete',
+        onPress: async () => {
+          try {
+            await closeBill(sessionId);
+            navigation.popToTop();
           } catch (err) {
             Alert.alert('Error', String(err));
           }
@@ -348,6 +387,12 @@ export default function SharedBillScreen({ navigation, route }: Props) {
               >
                 <Text style={styles.viewBillBtnText}>View My Bill →</Text>
               </TouchableOpacity>
+
+              {isHost && (
+                <TouchableOpacity style={styles.completeSessionBtn} onPress={handleCompleteSession}>
+                  <Text style={styles.completeSessionBtnText}>Complete Session ✓</Text>
+                </TouchableOpacity>
+              )}
             </View>
           }
           ListEmptyComponent={null}
@@ -480,4 +525,9 @@ const styles = StyleSheet.create({
     paddingVertical: SPACING.lg, alignItems: 'center', marginTop: SPACING.xl,
   },
   viewBillBtnText: { color: '#fff', fontWeight: '800', fontSize: FONT_SIZE.lg },
+  completeSessionBtn: {
+    borderRadius: 12, paddingVertical: SPACING.md, alignItems: 'center',
+    marginTop: SPACING.md, borderWidth: 1, borderColor: COLORS.success,
+  },
+  completeSessionBtnText: { color: COLORS.success, fontWeight: '700', fontSize: FONT_SIZE.md },
 });
